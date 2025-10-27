@@ -16,6 +16,7 @@ class AffiliateClick(db.Model):
     # Foreign keys
     list_id = db.Column(UUID(as_uuid=True), db.ForeignKey('lists.id'), nullable=False)
     product_id = db.Column(UUID(as_uuid=True), db.ForeignKey('products.id'), nullable=False)
+    product_link_id = db.Column(UUID(as_uuid=True), db.ForeignKey('product_links.id'), nullable=True)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)  # Null for guests
     
     # Click tracking
@@ -41,6 +42,7 @@ class AffiliateClick(db.Model):
             'id': str(self.id),
             'list_id': str(self.list_id),
             'product_id': str(self.product_id),
+            'product_link_id': str(self.product_link_id) if self.product_link_id else None,
             'user_id': str(self.user_id) if self.user_id else None,
             'url': self.url,
             'has_converted': self.has_converted,

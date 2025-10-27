@@ -41,6 +41,7 @@ class Product(db.Model):
     # Relationships
     votes = db.relationship('Vote', backref='product', lazy=True, cascade='all, delete-orphan')
     wishlist_items = db.relationship('Wishlist', backref='product', lazy=True, cascade='all, delete-orphan')
+    product_links = db.relationship('ProductLink', backref='product', lazy=True, cascade='all, delete-orphan')
     affiliate_clicks = db.relationship('AffiliateClick', backref='product', lazy=True)
     conversions = db.relationship('Conversion', backref='product', lazy=True)
     

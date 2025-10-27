@@ -16,6 +16,8 @@ __all__ = [
     'Product',
     'Vote',
     'Wishlist',
+    'Retailer',
+    'ProductLink',
     'AffiliateClick',
     'Conversion',
     'Payout',
@@ -29,6 +31,8 @@ from .list import List
 from .product import Product
 from .vote import Vote
 from .wishlist import Wishlist
+from .retailer import Retailer
+from .product_link import ProductLink
 from .affiliate_click import AffiliateClick
 from .conversion import Conversion
 from .payout import Payout
