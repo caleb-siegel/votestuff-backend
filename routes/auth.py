@@ -7,6 +7,7 @@ from . import api_bp
 from models import db, User
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.exc import IntegrityError
+from utils.jwt import generate_token
 import uuid
 
 @api_bp.route('/auth/test', methods=['GET'])
@@ -45,8 +46,12 @@ def register():
         db.session.add(new_user)
         db.session.commit()
         
+        # Generate JWT token
+        token = generate_token(new_user.id, new_user.is_admin)
+        
         return jsonify({
             'message': 'User created successfully',
+            'token': token,
             'user': new_user.to_dict()
         }), 201
     except IntegrityError:
@@ -69,12 +74,26 @@ def login():
     if not user.is_active:
         return jsonify({'error': 'Account is disabled'}), 403
     
-    # TODO: Generate JWT token
-    # For now, return user info
+    # Generate JWT token
+    token = generate_token(user.id, user.is_admin)
+    
     return jsonify({
         'message': 'Login successful',
+        'token': token,
         'user': user.to_dict()
     }), 200
+
+@api_bp.route('/auth/me', methods=['GET'])
+def get_current_user():
+    """Get current authenticated user"""
+    from utils.jwt import get_current_user as _get_current_user
+    
+    user = _get_current_user()
+    if not user:
+        return jsonify({'error': 'Authentication required'}), 401
+    
+    return jsonify({'user': user.to_dict()}), 200
+
 
 @api_bp.route('/auth/oauth', methods=['POST'])
 def oauth_login():
