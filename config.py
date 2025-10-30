@@ -31,9 +31,10 @@ class Config:
     
     # CORS settings
     # In development, allow common localhost ports; in production, use env var
-    cors_origins = os.environ.get('CORS_ORIGINS')
-    if cors_origins:
-        CORS_ORIGINS = cors_origins.split(',')
+    # This will be loaded by app.py and used for CORS configuration
+    cors_origins_env = os.environ.get('CORS_ORIGINS')
+    if cors_origins_env:
+        CORS_ORIGINS = [origin.strip() for origin in cors_origins_env.split(',')]
     else:
         # Default to allowing common development origins
         CORS_ORIGINS = [

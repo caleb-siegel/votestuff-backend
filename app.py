@@ -23,28 +23,37 @@ def create_app(config_class=Config):
     
     # Initialize extensions
     db.init_app(app)
+    
     # Enable CORS for frontend with proper configuration
     # IMPORTANT: Cannot use origins='*' with supports_credentials=True (browser security restriction)
     # So we explicitly list development origins when credentials are enabled
-    cors_origins = app.config.get('CORS_ORIGINS')
-    if not cors_origins:
-        # Default development origins - must be explicit list when using credentials
-        cors_origins = [
-            'http://localhost:3000',
-            'http://localhost:5173',
-            'http://localhost:8080',
-            'http://localhost:8081',
-            'http://127.0.0.1:3000',
-            'http://127.0.0.1:5173',
-            'http://127.0.0.1:8080',
-            'http://127.0.0.1:8081',
-        ]
     
+    # Default development origins - always include these
+    default_origins = [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://localhost:8080',
+        'http://localhost:8081',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:8080',
+        'http://127.0.0.1:8081',
+    ]
+    
+    # Get CORS origins from config (may be set via env var)
+    config_origins = app.config.get('CORS_ORIGINS', [])
+    
+    # Merge config origins with defaults to ensure all dev origins are included
+    # This prevents issues where env var only has partial list
+    cors_origins = list(set(default_origins + (config_origins if config_origins else [])))
+    
+    # Initialize CORS with explicit configuration
     CORS(app,
          origins=cors_origins,
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
          allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
-         supports_credentials=True)
+         supports_credentials=True,
+         expose_headers=['Content-Type', 'Authorization'])
     
     # Register blueprints
     app.register_blueprint(api_bp, url_prefix='/api')
