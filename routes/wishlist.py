@@ -77,3 +77,77 @@ def remove_from_wishlist(user_id, product_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+@api_bp.route('/products/<product_id>/wishlist-status', methods=['GET'])
+def get_wishlist_status(product_id):
+    """Check if product is in user's wishlist"""
+    user_id = request.args.get('user_id')
+    
+    if not user_id:
+        return jsonify({'is_wishlisted': False})
+    
+    try:
+        item = Wishlist.query.filter_by(
+            user_id=uuid.UUID(user_id),
+            product_id=uuid.UUID(product_id)
+        ).first()
+        
+        return jsonify({'is_wishlisted': item is not None})
+    except ValueError:
+        return jsonify({'error': 'Invalid IDs'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/products/<product_id>/wishlist', methods=['POST', 'DELETE'])
+def toggle_wishlist(product_id):
+    """Toggle product in user's wishlist"""
+    data = request.get_json()
+    user_id = data.get('user_id')
+    
+    if not user_id:
+        return jsonify({'error': 'User ID required'}), 400
+    
+    try:
+        user_id_uuid = uuid.UUID(user_id)
+        product_id_uuid = uuid.UUID(product_id)
+        
+        existing_item = Wishlist.query.filter_by(
+            user_id=user_id_uuid,
+            product_id=product_id_uuid
+        ).first()
+        
+        if request.method == 'POST':
+            if existing_item:
+                return jsonify({'error': 'Product already in wishlist'}), 409
+            
+            new_item = Wishlist(
+                id=uuid.uuid4(),
+                user_id=user_id_uuid,
+                product_id=product_id_uuid
+            )
+            db.session.add(new_item)
+            db.session.commit()
+            
+            return jsonify({
+                'message': 'Added to wishlist',
+                'is_wishlisted': True
+            }), 201
+        else:  # DELETE
+            if not existing_item:
+                return jsonify({'error': 'Item not in wishlist'}), 404
+            
+            db.session.delete(existing_item)
+            db.session.commit()
+            
+            return jsonify({
+                'message': 'Removed from wishlist',
+                'is_wishlisted': False
+            }), 200
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'Product already in wishlist'}), 409
+    except ValueError:
+        return jsonify({'error': 'Invalid IDs'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+

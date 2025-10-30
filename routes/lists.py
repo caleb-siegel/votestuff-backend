@@ -11,13 +11,18 @@ import uuid
 @api_bp.route('/lists', methods=['GET'])
 def get_lists():
     """Get lists with filters"""
+    from sqlalchemy.orm import joinedload
+    
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     status = request.args.get('status', 'approved')
     category_id = request.args.get('category_id', type=str)
     sort_by = request.args.get('sort_by', 'newest')  # newest, votes, views
     
-    query = List.query
+    query = List.query.options(
+        joinedload(List.category),
+        joinedload(List.creator)
+    )
     
     # Filter by status
     if status:
@@ -38,8 +43,18 @@ def get_lists():
     # Paginate
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
     
+    # Build response with category and creator data
+    lists_data = []
+    for lst in pagination.items:
+        list_dict = lst.to_dict()
+        if lst.category:
+            list_dict['category'] = lst.category.to_dict()
+        if lst.creator:
+            list_dict['creator'] = lst.creator.to_dict()
+        lists_data.append(list_dict)
+    
     return jsonify({
-        'lists': [list.to_dict() for list in pagination.items],
+        'lists': lists_data,
         'page': page,
         'per_page': per_page,
         'total': pagination.total,
@@ -50,13 +65,24 @@ def get_lists():
 def get_list(list_id):
     """Get single list with products"""
     try:
-        lst = List.query.get_or_404(uuid.UUID(list_id))
+        from sqlalchemy.orm import joinedload
+        from models.product_link import ProductLink
+        from models.retailer import Retailer
         
-        # Increment view count
+        lst = List.query.options(
+            joinedload(List.products).joinedload(Product.product_links).joinedload(ProductLink.retailer)
+        ).get_or_404(uuid.UUID(list_id))
+        
+        # Increment view count (analytics tracking)
         lst.view_count += 1
         db.session.commit()
         
         list_data = lst.to_dict()
+        # Products are returned in the order defined by their relationship
+        # The Product model relationship includes: order_by='Product.rank'
+        # This means products are automatically sorted by their rank field (1, 2, 3, etc.)
+        # which was calculated by update_list_ranking() based on votes.
+        # Rank 1 = highest (best net score + upvote %), Rank 2 = second, etc.
         list_data['products'] = [product.to_dict() for product in lst.products]
         list_data['creator'] = lst.creator.to_dict()
         if lst.category:
@@ -103,13 +129,28 @@ def create_list():
 @api_bp.route('/lists/trending', methods=['GET'])
 def get_trending_lists():
     """Get trending lists based on recent votes"""
-    query = List.query.filter_by(status='approved')
+    from sqlalchemy.orm import joinedload
+    
+    query = List.query.options(
+        joinedload(List.category),
+        joinedload(List.creator)
+    ).filter_by(status='approved')
     query = query.order_by(desc(List.total_votes))
     
     # Get top 10
     trending = query.limit(10).all()
     
+    # Build response with category and creator data
+    lists_data = []
+    for lst in trending:
+        list_dict = lst.to_dict()
+        if lst.category:
+            list_dict['category'] = lst.category.to_dict()
+        if lst.creator:
+            list_dict['creator'] = lst.creator.to_dict()
+        lists_data.append(list_dict)
+    
     return jsonify({
-        'lists': [list.to_dict() for list in trending]
+        'lists': lists_data
     })
 

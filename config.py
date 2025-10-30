@@ -30,8 +30,22 @@ class Config:
     AFFILIATE_AMAZON = os.environ.get('AMAZON_ASSOCIATES_TAG')
     
     # CORS settings
-    cors_origins = os.environ.get('CORS_ORIGINS', '*')
-    CORS_ORIGINS = cors_origins.split(',') if cors_origins != '*' else ['*']
+    # In development, allow common localhost ports; in production, use env var
+    cors_origins = os.environ.get('CORS_ORIGINS')
+    if cors_origins:
+        CORS_ORIGINS = cors_origins.split(',')
+    else:
+        # Default to allowing common development origins
+        CORS_ORIGINS = [
+            'http://localhost:3000',
+            'http://localhost:5173',
+            'http://localhost:8080',
+            'http://localhost:8081',
+            'http://127.0.0.1:3000',
+            'http://127.0.0.1:5173',
+            'http://127.0.0.1:8080',
+            'http://127.0.0.1:8081',
+        ]
 
 class DevelopmentConfig(Config):
     """Development configuration"""

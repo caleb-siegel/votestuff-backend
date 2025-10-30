@@ -20,6 +20,7 @@ class ProductLink(db.Model):
     # Link information
     link_name = db.Column(db.String(200), nullable=True)  # e.g., "Amazon Prime Deal", "Best Buy Price"
     url = db.Column(db.String(1000), nullable=False)
+    price = db.Column(db.Numeric(10, 2), nullable=True)  # Product price at this retailer
     
     # Link properties
     is_affiliate_link = db.Column(db.Boolean, default=True)  # Whether this is an affiliate link
@@ -43,6 +44,7 @@ class ProductLink(db.Model):
             'retailer_id': str(self.retailer_id),
             'link_name': self.link_name,
             'url': self.url,
+            'price': float(self.price) if self.price else None,
             'is_affiliate_link': self.is_affiliate_link,
             'is_primary': self.is_primary,
             'click_count': self.click_count,

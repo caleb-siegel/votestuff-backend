@@ -34,6 +34,12 @@ class List(db.Model):
     approved_at = db.Column(db.DateTime, nullable=True)
     
     # Relationships
+    # Note: category relationship is defined in Category model with backref='category'
+    # Products are automatically ordered by their rank field (1 = highest/best rank)
+    # Rank is calculated by update_list_ranking() based on voting data:
+    #   1. Net score (upvotes - downvotes) - PRIMARY
+    #   2. Upvote percentage - SECONDARY (breaks ties)
+    #   3. Most recent upvote timestamp - TERTIARY (breaks remaining ties)
     products = db.relationship('Product', backref='list', lazy=True, cascade='all, delete-orphan', order_by='Product.rank')
     votes = db.relationship('Vote', backref='list', lazy=True, cascade='all, delete-orphan')
     affiliate_clicks = db.relationship('AffiliateClick', backref='list', lazy=True)
