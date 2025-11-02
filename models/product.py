@@ -14,11 +14,11 @@ class Product(db.Model):
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    image_url = db.Column(db.String(500), nullable=True)
+    image_url = db.Column(db.Text, nullable=True)
     
     # Affiliate links
-    affiliate_url = db.Column(db.String(500), nullable=False)
-    product_url = db.Column(db.String(500), nullable=True)  # Original product page
+    affiliate_url = db.Column(db.Text, nullable=False)
+    product_url = db.Column(db.Text, nullable=True)  # Original product page
     
     # Additional affiliate links (JSON field for multiple sources)
     additional_links = db.Column(db.Text, nullable=True)  # JSON string: {source: url}

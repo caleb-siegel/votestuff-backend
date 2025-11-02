@@ -20,7 +20,7 @@ class AffiliateClick(db.Model):
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)  # Null for guests
     
     # Click tracking
-    url = db.Column(db.String(500), nullable=False)
+    url = db.Column(db.Text, nullable=False)
     session_id = db.Column(db.String(255), nullable=True)
     ip_address = db.Column(db.String(50), nullable=True)
     user_agent = db.Column(db.String(500), nullable=True)
