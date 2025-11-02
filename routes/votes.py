@@ -47,20 +47,31 @@ def vote_product(product_id):
     if vote_type not in ['up', 'down']:
         return jsonify({'error': 'Invalid vote type'}), 400
     
-    # Require user to be signed in to vote
+    # Accept either user_id (authenticated) or session_id (anonymous)
     user_id = data.get('user_id')
-    if not user_id:
-        return jsonify({'error': 'You must be signed in to vote. Please log in or create an account.'}), 401
+    session_id = data.get('session_id')
+    
+    if not user_id and not session_id:
+        return jsonify({'error': 'You must be signed in to vote, or provide a session ID.'}), 401
     
     try:
         product = Product.query.get_or_404(uuid.UUID(product_id))
         
         # Check if user already voted on this product
-        # Users can only have one vote per product (enforced by unique constraint)
-        existing_vote = Vote.query.filter_by(
-            product_id=product.id,
-            user_id=user_id
-        ).first()
+        # For authenticated users: check by user_id
+        # For anonymous users: check by session_id
+        if user_id:
+            existing_vote = Vote.query.filter_by(
+                product_id=product.id,
+                user_id=user_id
+            ).first()
+        else:
+            # Anonymous user - check by session_id
+            existing_vote = Vote.query.filter_by(
+                product_id=product.id,
+                session_id=session_id,
+                user_id=None  # Ensure it's an anonymous vote
+            ).first()
         
         # Check if user wants to toggle off their vote (remove it entirely)
         toggle_off = data.get('toggle_off', False)
@@ -95,14 +106,17 @@ def vote_product(product_id):
             # User hasn't voted on this product yet - create new vote
             # Only create if not toggling off (can't toggle off a non-existent vote)
             if not toggle_off:
+                # Get IP address for audit/analytics
+                ip_addr = get_client_ip()
+                
                 new_vote = Vote(
                     id=uuid.uuid4(),
                     product_id=product.id,
                     list_id=product.list_id,
-                    user_id=user_id,
+                    user_id=user_id if user_id else None,  # None for anonymous users
                     vote_type=vote_type,
-                    session_id=data.get('session_id'),
-                    ip_address=get_client_ip()  # Store IP for analytics/audit purposes
+                    session_id=session_id if not user_id else data.get('session_id'),  # Prioritize session_id for anonymous
+                    ip_address=ip_addr  # Store IP for analytics/audit purposes
                 )
                 db.session.add(new_vote)
                 
@@ -135,18 +149,28 @@ def vote_product(product_id):
 
 @api_bp.route('/products/<product_id>/vote-status', methods=['GET'])
 def get_vote_status(product_id):
-    """Get vote status for a logged-in user"""
+    """Get vote status for a user (authenticated or anonymous)"""
     user_id = request.args.get('user_id')
+    session_id = request.args.get('session_id')
     
     try:
         product = Product.query.get_or_404(uuid.UUID(product_id))
         
-        # Find user's vote (only for logged-in users)
+        # Find user's vote - check by user_id (authenticated) or session_id (anonymous)
         vote_type = None
         if user_id:
             vote = Vote.query.filter_by(
                 product_id=product.id,
                 user_id=user_id
+            ).first()
+            if vote:
+                vote_type = vote.vote_type
+        elif session_id:
+            # Check for anonymous vote by session_id
+            vote = Vote.query.filter_by(
+                product_id=product.id,
+                session_id=session_id,
+                user_id=None  # Ensure it's an anonymous vote
             ).first()
             if vote:
                 vote_type = vote.vote_type
