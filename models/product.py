@@ -25,6 +25,7 @@ class Product(db.Model):
     
     # Foreign keys
     list_id = db.Column(UUID(as_uuid=True), db.ForeignKey('lists.id'), nullable=False)
+    retailer_id = db.Column(UUID(as_uuid=True), db.ForeignKey('retailers.id'), nullable=True)
     
     # Voting
     upvotes = db.Column(db.Integer, default=0)
@@ -39,6 +40,7 @@ class Product(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
+    retailer = db.relationship('Retailer', backref='products', lazy=True)
     votes = db.relationship('Vote', backref='product', lazy=True, cascade='all, delete-orphan')
     wishlist_items = db.relationship('Wishlist', backref='product', lazy=True, cascade='all, delete-orphan')
     product_links = db.relationship('ProductLink', backref='product', lazy=True, cascade='all, delete-orphan')
@@ -112,6 +114,8 @@ class Product(db.Model):
             'affiliate_url': self.affiliate_url,
             'product_url': self.product_url,
             'list_id': str(self.list_id),
+            'retailer_id': str(self.retailer_id) if self.retailer_id else None,
+            'retailer': self.retailer.to_dict() if self.retailer else None,
             'upvotes': self.upvotes,
             'downvotes': self.downvotes,
             'net_score': self.net_score,

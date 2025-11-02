@@ -78,6 +78,7 @@ def get_list(list_id):
         from models.retailer import Retailer
         
         lst = List.query.options(
+            joinedload(List.products).joinedload(Product.retailer),
             joinedload(List.products).joinedload(Product.product_links).joinedload(ProductLink.retailer)
         ).get_or_404(uuid.UUID(list_id))
         
@@ -207,25 +208,48 @@ def create_list():
                     'price': product_data.get('price')
                 }]
             
+            primary_retailer = None
             for link_idx, link_data in enumerate(links_data):
                 if not link_data.get('url'):
                     continue
                 
                 # Find or create retailer
-                retailer_name = link_data.get('retailer_name', 'Amazon')
-                retailer = Retailer.query.filter_by(name=retailer_name).first()
+                retailer = None
+                retailer_id = link_data.get('retailer_id')
+                if retailer_id:
+                    # Try to find retailer by ID
+                    try:
+                        retailer_uuid = uuid.UUID(retailer_id)
+                        retailer = Retailer.query.get(retailer_uuid)
+                    except ValueError:
+                        pass
+                
+                # If not found by ID, try by name
                 if not retailer:
-                    # Create retailer if doesn't exist
-                    retailer_slug = re.sub(r'[^a-z0-9]+', '-', retailer_name.lower()).strip('-')
-                    retailer = Retailer(
-                        id=uuid.uuid4(),
-                        name=retailer_name,
-                        slug=retailer_slug,
-                        description=f"Retailer: {retailer_name}",
-                        is_active=True
-                    )
-                    db.session.add(retailer)
-                    db.session.flush()
+                    retailer_name = link_data.get('retailer_name', 'Amazon')
+                    retailer = Retailer.query.filter_by(name=retailer_name).first()
+                    if not retailer:
+                        # Create retailer if doesn't exist
+                        retailer_slug = re.sub(r'[^a-z0-9]+', '-', retailer_name.lower()).strip('-')
+                        # Ensure slug is unique
+                        base_slug = retailer_slug
+                        counter = 1
+                        while Retailer.query.filter_by(slug=retailer_slug).first():
+                            retailer_slug = f"{base_slug}-{counter}"
+                            counter += 1
+                        retailer = Retailer(
+                            id=uuid.uuid4(),
+                            name=retailer_name,
+                            slug=retailer_slug,
+                            description=f"Retailer: {retailer_name}",
+                            is_active=True
+                        )
+                        db.session.add(retailer)
+                        db.session.flush()
+                
+                # Set primary retailer from first link
+                if link_idx == 0 and not primary_retailer:
+                    primary_retailer = retailer
                 
                 product_link = ProductLink(
                     id=uuid.uuid4(),
@@ -238,6 +262,10 @@ def create_list():
                     is_primary=link_data.get('is_primary', link_idx == 0)
                 )
                 db.session.add(product_link)
+            
+            # Set retailer_id on product from first link's retailer
+            if primary_retailer:
+                product.retailer_id = primary_retailer.id
             
             created_products.append(product)
         
@@ -350,23 +378,47 @@ def update_list(list_id):
                         'price': None
                     }]
                 
+                primary_retailer = None
                 for link_idx, link_data in enumerate(links_data):
                     if not link_data.get('url'):
                         continue
                     
-                    retailer_name = link_data.get('retailer_name', 'Amazon')
-                    retailer = Retailer.query.filter_by(name=retailer_name).first()
+                    # Find or create retailer
+                    retailer = None
+                    retailer_id = link_data.get('retailer_id')
+                    if retailer_id:
+                        # Try to find retailer by ID
+                        try:
+                            retailer_uuid = uuid.UUID(retailer_id)
+                            retailer = Retailer.query.get(retailer_uuid)
+                        except ValueError:
+                            pass
+                    
+                    # If not found by ID, try by name
                     if not retailer:
-                        retailer_slug = re.sub(r'[^a-z0-9]+', '-', retailer_name.lower()).strip('-')
-                        retailer = Retailer(
-                            id=uuid.uuid4(),
-                            name=retailer_name,
-                            slug=retailer_slug,
-                            description=f"Retailer: {retailer_name}",
-                            is_active=True
-                        )
-                        db.session.add(retailer)
-                        db.session.flush()
+                        retailer_name = link_data.get('retailer_name', 'Amazon')
+                        retailer = Retailer.query.filter_by(name=retailer_name).first()
+                        if not retailer:
+                            retailer_slug = re.sub(r'[^a-z0-9]+', '-', retailer_name.lower()).strip('-')
+                            # Ensure slug is unique
+                            base_slug = retailer_slug
+                            counter = 1
+                            while Retailer.query.filter_by(slug=retailer_slug).first():
+                                retailer_slug = f"{base_slug}-{counter}"
+                                counter += 1
+                            retailer = Retailer(
+                                id=uuid.uuid4(),
+                                name=retailer_name,
+                                slug=retailer_slug,
+                                description=f"Retailer: {retailer_name}",
+                                is_active=True
+                            )
+                            db.session.add(retailer)
+                            db.session.flush()
+                    
+                    # Set primary retailer from first link
+                    if link_idx == 0 and not primary_retailer:
+                        primary_retailer = retailer
                     
                     product_link = ProductLink(
                         id=uuid.uuid4(),
@@ -379,6 +431,10 @@ def update_list(list_id):
                         is_primary=link_data.get('is_primary', link_idx == 0)
                     )
                     db.session.add(product_link)
+                
+                # Set retailer_id on product from first link's retailer
+                if primary_retailer:
+                    product.retailer_id = primary_retailer.id
                 
                 created_products.append(product)
         
