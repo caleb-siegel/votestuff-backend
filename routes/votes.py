@@ -7,6 +7,25 @@ from . import api_bp
 from models import db, Vote, Product, List
 import uuid
 
+def get_client_ip():
+    """
+    Get the client's real IP address, handling proxies and load balancers.
+    Checks X-Forwarded-For header first, then X-Real-IP, then falls back to remote_addr.
+    """
+    # Check for X-Forwarded-For header (used by proxies/load balancers)
+    if request.headers.get('X-Forwarded-For'):
+        # X-Forwarded-For can contain multiple IPs (client, proxy1, proxy2)
+        # The first one is typically the original client IP
+        ip = request.headers.get('X-Forwarded-For').split(',')[0].strip()
+        return ip
+    
+    # Check for X-Real-IP header (used by some proxies)
+    if request.headers.get('X-Real-IP'):
+        return request.headers.get('X-Real-IP')
+    
+    # Fall back to remote_addr
+    return request.remote_addr
+
 @api_bp.route('/products/<product_id>/vote', methods=['POST'])
 def vote_product(product_id):
     """
@@ -28,18 +47,20 @@ def vote_product(product_id):
     if vote_type not in ['up', 'down']:
         return jsonify({'error': 'Invalid vote type'}), 400
     
+    # Require user to be signed in to vote
+    user_id = data.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'You must be signed in to vote. Please log in or create an account.'}), 401
+    
     try:
         product = Product.query.get_or_404(uuid.UUID(product_id))
-        user_id = data.get('user_id')
         
         # Check if user already voted on this product
-        # Note: Users can only have one vote per product (enforced by unique constraint)
-        existing_vote = None
-        if user_id:
-            existing_vote = Vote.query.filter_by(
-                product_id=product.id,
-                user_id=user_id
-            ).first()
+        # Users can only have one vote per product (enforced by unique constraint)
+        existing_vote = Vote.query.filter_by(
+            product_id=product.id,
+            user_id=user_id
+        ).first()
         
         # Check if user wants to toggle off their vote (remove it entirely)
         toggle_off = data.get('toggle_off', False)
@@ -78,10 +99,10 @@ def vote_product(product_id):
                     id=uuid.uuid4(),
                     product_id=product.id,
                     list_id=product.list_id,
-                    user_id=user_id if user_id else None,  # Can be None for anonymous/guest users
+                    user_id=user_id,
                     vote_type=vote_type,
-                    session_id=data.get('session_id'),  # Track anonymous users by session
-                    ip_address=request.remote_addr
+                    session_id=data.get('session_id'),
+                    ip_address=get_client_ip()  # Store IP for analytics/audit purposes
                 )
                 db.session.add(new_vote)
                 
@@ -114,13 +135,13 @@ def vote_product(product_id):
 
 @api_bp.route('/products/<product_id>/vote-status', methods=['GET'])
 def get_vote_status(product_id):
-    """Get vote status for a user"""
+    """Get vote status for a logged-in user"""
     user_id = request.args.get('user_id')
     
     try:
         product = Product.query.get_or_404(uuid.UUID(product_id))
         
-        # Find user's vote
+        # Find user's vote (only for logged-in users)
         vote_type = None
         if user_id:
             vote = Vote.query.filter_by(
