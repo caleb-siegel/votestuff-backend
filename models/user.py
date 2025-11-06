@@ -38,6 +38,35 @@ class User(db.Model):
     wishlist_items = db.relationship('Wishlist', backref='user', lazy=True, cascade='all, delete-orphan')
     payouts = db.relationship('Payout', backref='user', lazy=True)
     
+    def get_cashback_stats(self):
+        """Calculate cashback statistics from conversions and payouts"""
+        from .payout import Payout
+        
+        # Get total cashback earned (from paid cashback payouts)
+        total_cashback_earned = db.session.query(
+            db.func.sum(Payout.amount)
+        ).filter(
+            Payout.user_id == self.id,
+            Payout.payout_type == 'cashback',
+            Payout.status == 'paid'
+        ).scalar() or 0
+        
+        # Get pending cashback (from pending/approved cashback payouts)
+        pending_cashback = db.session.query(
+            db.func.sum(Payout.amount)
+        ).filter(
+            Payout.user_id == self.id,
+            Payout.payout_type == 'cashback',
+            Payout.status.in_(['pending', 'processing'])
+        ).scalar() or 0
+        
+        return {
+            'current_balance': float(self.cashback_balance) if self.cashback_balance else 0,
+            'total_earned': float(total_cashback_earned) if total_cashback_earned else 0,
+            'pending_amount': float(pending_cashback) if pending_cashback else 0,
+            'total_paid_out': float(self.total_payout) if self.total_payout else 0
+        }
+    
     def to_dict(self):
         """Convert to dictionary"""
         return {

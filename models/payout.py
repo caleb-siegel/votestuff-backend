@@ -8,15 +8,18 @@ from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
 class Payout(db.Model):
-    """Payout tracking for list creators"""
+    """Payout tracking for both list creators and users who clicked (cashback)"""
     __tablename__ = 'payouts'
     
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Foreign keys
-    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False, index=True)
     list_id = db.Column(UUID(as_uuid=True), db.ForeignKey('lists.id'), nullable=False)
     conversion_id = db.Column(UUID(as_uuid=True), db.ForeignKey('conversions.id'), nullable=True)
+    
+    # Payout type: 'creator' or 'cashback'
+    payout_type = db.Column(db.String(20), default='creator', nullable=False, index=True)
     
     # Payout details
     amount = db.Column(db.Numeric(10, 2), nullable=False)
@@ -41,6 +44,7 @@ class Payout(db.Model):
             'user_id': str(self.user_id),
             'list_id': str(self.list_id),
             'conversion_id': str(self.conversion_id) if self.conversion_id else None,
+            'payout_type': self.payout_type,
             'amount': float(self.amount) if self.amount else 0,
             'status': self.status,
             'currency': self.currency,

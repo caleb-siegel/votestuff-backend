@@ -29,6 +29,11 @@ class Config:
     AFFILIATE_PARTNERIZE = os.environ.get('PARTNERIZE_API_KEY')
     AFFILIATE_AMAZON = os.environ.get('AMAZON_ASSOCIATES_TAG')
     
+    # Cashback and payout percentages (as float, e.g., 50.0 = 50%)
+    CASHBACK_PERCENTAGE = float(os.environ.get('CASHBACK_PERCENTAGE', '50.0'))  # % of commission to user who clicked
+    CREATOR_PAYOUT_PERCENTAGE = float(os.environ.get('CREATOR_PAYOUT_PERCENTAGE', '30.0'))  # % of commission to list creator
+    # Remaining percentage stays with platform
+    
     # CORS settings
     # In development, allow common localhost ports; in production, use env var
     # This will be loaded by app.py and used for CORS configuration

@@ -19,4 +19,5 @@ import routes.admin
 import routes.analytics
 import routes.search
 import routes.retailers
+import routes.conversions
 
