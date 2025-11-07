@@ -5,6 +5,8 @@ Search routes
 from flask import request, jsonify
 from . import api_bp
 from models import db, List, Product, Category
+from models.retailer import Retailer
+from models.product_link import ProductLink
 from sqlalchemy import or_, and_
 import re
 
@@ -190,6 +192,64 @@ def search():
         List.category_id.in_(category_ids)
     ).filter_by(status='approved').all()
     
+    # Search retailers - same flexible matching
+    exact_phrase_pattern = f'%{query_lower}%'
+    retailer_name_filters = [Retailer.name.ilike(exact_phrase_pattern)]
+    retailer_desc_filters = [Retailer.description.ilike(exact_phrase_pattern)]
+    
+    if len(normalized_query_words) > 1:
+        word_name_filters = [Retailer.name.ilike(f'%{word}%') for word in normalized_query_words]
+        if word_name_filters:
+            retailer_name_filters.append(and_(*word_name_filters))
+        
+        word_desc_filters = [Retailer.description.ilike(f'%{word}%') for word in normalized_query_words]
+        if word_desc_filters:
+            retailer_desc_filters.append(and_(*word_desc_filters))
+    elif len(normalized_query_words) == 1:
+        word_pattern = f'%{normalized_query_words[0]}%'
+        retailer_name_filters.append(Retailer.name.ilike(word_pattern))
+        retailer_desc_filters.append(Retailer.description.ilike(word_pattern))
+    
+    retailers = Retailer.query.filter(
+        or_(
+            *retailer_name_filters,
+            *retailer_desc_filters
+        )
+    ).filter_by(is_active=True).limit(10).all()
+    
+    # For each retailer, get products that have product_links to that retailer
+    retailers_with_products = []
+    for retailer in retailers:
+        retailer_dict = retailer.to_dict()
+        
+        # Get products that have product_links to this retailer
+        # Join ProductLink with Product and List, filter by retailer_id and list status
+        retailer_products = db.session.query(Product).join(
+            ProductLink, Product.id == ProductLink.product_id
+        ).join(
+            List, Product.list_id == List.id
+        ).filter(
+            ProductLink.retailer_id == retailer.id
+        ).filter(
+            List.status == 'approved'  # Only products from approved lists
+        ).distinct().limit(10).all()
+        
+        # Format products with their list info
+        products_with_lists = []
+        for prod in retailer_products:
+            product_dict = prod.to_dict()
+            # Include basic list info
+            if prod.list:
+                product_dict['list'] = {
+                    'id': str(prod.list.id),
+                    'title': prod.list.title,
+                    'slug': prod.list.slug,
+                }
+            products_with_lists.append(product_dict)
+        
+        retailer_dict['products'] = products_with_lists
+        retailers_with_products.append(retailer_dict)
+    
     # Combine all lists, removing duplicates
     all_lists = {}
     for lst in lists_by_title + lists_by_products + lists_by_category:
@@ -222,6 +282,7 @@ def search():
         'lists': [lst.to_dict() for lst in sorted_lists],
         'products': products_with_lists,
         'categories': [cat.to_dict() for cat in categories],
+        'retailers': retailers_with_products,
         'query': query
     })
 
