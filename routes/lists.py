@@ -466,14 +466,15 @@ def get_trending_lists():
     
     query = List.query.options(
         joinedload(List.category),
-        joinedload(List.creator)
+        joinedload(List.creator),
+        joinedload(List.products)
     ).filter_by(status='approved')
     query = query.order_by(desc(List.total_votes))
     
     # Get top 10
     trending = query.limit(10).all()
     
-    # Build response with category and creator data
+    # Build response with category, creator, and top product data
     lists_data = []
     for lst in trending:
         list_dict = lst.to_dict()
@@ -481,6 +482,20 @@ def get_trending_lists():
             list_dict['category'] = lst.category.to_dict()
         if lst.creator:
             list_dict['creator'] = lst.creator.to_dict()
+        
+        # Find the highest ranked product (rank=1) for this list
+        top_product = None
+        if lst.products:
+            # Products are already ordered by rank due to the relationship definition
+            # Rank 1 is the highest/best ranked product
+            top_product = next((p for p in lst.products if p.rank == 1), None)
+            if not top_product and len(lst.products) > 0:
+                # Fallback: if no product has rank=1, use the first product (shouldn't happen but safety check)
+                top_product = lst.products[0]
+        
+        if top_product:
+            list_dict['top_product'] = top_product.to_dict()
+        
         lists_data.append(list_dict)
     
     return jsonify({
