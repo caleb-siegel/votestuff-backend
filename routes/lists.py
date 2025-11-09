@@ -4,19 +4,64 @@ List routes
 
 from flask import request, jsonify
 from . import api_bp
-from models import db, List, Product
-from sqlalchemy import desc
+from models import db, List, Product, Category
+from sqlalchemy import desc, or_
+from sqlalchemy.orm import joinedload
 import uuid
+
+# Cache for category tree to avoid reloading on every request
+_category_tree_cache = None
+_category_tree_cache_timestamp = None
+
+def _get_category_tree():
+    """Get or build cached category tree"""
+    global _category_tree_cache, _category_tree_cache_timestamp
+    from datetime import datetime, timedelta
+    
+    # Cache for 5 minutes
+    if _category_tree_cache is None or (
+        _category_tree_cache_timestamp and 
+        datetime.utcnow() - _category_tree_cache_timestamp > timedelta(minutes=5)
+    ):
+        all_categories = Category.query.all()
+        children_map = {}
+        for cat in all_categories:
+            if cat.parent_id:
+                parent_id_str = str(cat.parent_id)
+                if parent_id_str not in children_map:
+                    children_map[parent_id_str] = []
+                children_map[parent_id_str].append(cat)
+        _category_tree_cache = children_map
+        _category_tree_cache_timestamp = datetime.utcnow()
+    
+    return _category_tree_cache
+
+def get_all_descendant_ids(category_id):
+    """Get all descendant category IDs (including the category itself) recursively"""
+    children_map = _get_category_tree()
+    
+    # Start with the category itself
+    descendant_ids = [category_id]
+    
+    # Recursively collect all descendant IDs
+    def collect_descendants(cat_id):
+        cat_id_str = str(cat_id)
+        if cat_id_str in children_map:
+            for child in children_map[cat_id_str]:
+                descendant_ids.append(child.id)
+                collect_descendants(child.id)
+    
+    collect_descendants(category_id)
+    return descendant_ids
 
 @api_bp.route('/lists', methods=['GET'])
 def get_lists():
     """Get lists with filters"""
-    from sqlalchemy.orm import joinedload
-    
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     status = request.args.get('status', 'approved')
     category_id = request.args.get('category_id', type=str)
+    include_subcategories = request.args.get('include_subcategories', 'true').lower() == 'true'
     creator_id = request.args.get('creator_id', type=str)
     sort_by = request.args.get('sort_by', 'newest')  # newest, votes, views
     
@@ -29,9 +74,20 @@ def get_lists():
     if status:
         query = query.filter_by(status=status)
     
-    # Filter by category
+    # Filter by category (including subcategories if requested)
     if category_id:
-        query = query.filter_by(category_id=category_id)
+        try:
+            category_uuid = uuid.UUID(category_id)
+            if include_subcategories:
+                # Get all descendant category IDs (including the category itself)
+                descendant_ids = get_all_descendant_ids(category_uuid)
+                # Filter by any of these category IDs
+                query = query.filter(List.category_id.in_(descendant_ids))
+            else:
+                # Only filter by the exact category
+                query = query.filter_by(category_id=category_uuid)
+        except ValueError:
+            pass  # Invalid UUID, skip filter
     
     # Filter by creator
     if creator_id:
