@@ -34,3 +34,5 @@ def downgrade():
         batch_op.drop_constraint('fk_categories_parent_id', type_='foreignkey')
         batch_op.drop_column('parent_id')
 
+
+
