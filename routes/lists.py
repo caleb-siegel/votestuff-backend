@@ -519,18 +519,19 @@ def update_list(list_id):
 def get_trending_lists():
     """Get trending lists based on recent votes"""
     from sqlalchemy.orm import joinedload
+    from models.product_link import ProductLink
     
     query = List.query.options(
         joinedload(List.category),
         joinedload(List.creator),
-        joinedload(List.products)
+        joinedload(List.products).joinedload(Product.product_links).joinedload(ProductLink.retailer)
     ).filter_by(status='approved')
     query = query.order_by(desc(List.total_votes))
     
     # Get top 10
     trending = query.limit(10).all()
     
-    # Build response with category, creator, and top product data
+    # Build response with category, creator, and top 4 products data
     lists_data = []
     for lst in trending:
         list_dict = lst.to_dict()
@@ -539,18 +540,24 @@ def get_trending_lists():
         if lst.creator:
             list_dict['creator'] = lst.creator.to_dict()
         
-        # Find the highest ranked product (rank=1) for this list
-        top_product = None
+        # Get the top 4 ranked products for this list
+        top_products = []
         if lst.products:
             # Products are already ordered by rank due to the relationship definition
-            # Rank 1 is the highest/best ranked product
-            top_product = next((p for p in lst.products if p.rank == 1), None)
-            if not top_product and len(lst.products) > 0:
-                # Fallback: if no product has rank=1, use the first product (shouldn't happen but safety check)
-                top_product = lst.products[0]
+            # Get products with ranks 1-4
+            for product in lst.products:
+                if product.rank and product.rank <= 4:
+                    product_dict = product.to_dict()
+                    # Add retailer from first product link if available
+                    if product.product_links and len(product.product_links) > 0:
+                        first_link = product.product_links[0]
+                        if first_link.retailer:
+                            product_dict['retailer'] = first_link.retailer.to_dict()
+                    top_products.append(product_dict)
+                    if len(top_products) >= 4:
+                        break
         
-        if top_product:
-            list_dict['top_product'] = top_product.to_dict()
+        list_dict['top_products'] = top_products
         
         lists_data.append(list_dict)
     
