@@ -148,11 +148,15 @@ def search():
         product_name_filters.append(Product.name.ilike(word_pattern))
         product_desc_filters.append(Product.description.ilike(word_pattern))
     
-    products = Product.query.filter(
+    products = Product.query.join(
+        List, Product.list_id == List.id
+    ).filter(
         or_(
             *product_name_filters,
             *product_desc_filters
         )
+    ).filter(
+        List.status == 'approved'  # Only products from approved lists
     ).limit(20).all()
     
     # Get lists that contain matching products
@@ -265,18 +269,19 @@ def search():
         )
     )[:15]
     
-    # For each product, include its list info
+    # For each product, include its list info (only if list is approved)
     products_with_lists = []
     for prod in products[:10]:  # Limit products displayed
-        product_dict = prod.to_dict()
-        # Include basic list info
-        if prod.list:
+        # Double-check that the product's list is approved (defensive check)
+        if prod.list and prod.list.status == 'approved':
+            product_dict = prod.to_dict()
+            # Include basic list info
             product_dict['list'] = {
                 'id': str(prod.list.id),
                 'title': prod.list.title,
                 'slug': prod.list.slug,
             }
-        products_with_lists.append(product_dict)
+            products_with_lists.append(product_dict)
     
     return jsonify({
         'lists': [lst.to_dict() for lst in sorted_lists],
