@@ -60,7 +60,8 @@ class List(db.Model):
             'total_votes': self.total_votes,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'approved_at': self.approved_at.isoformat() if self.approved_at else None,
-            'product_count': len(self.products) if self.products else 0
+            'product_count': len(self.products) if self.products else 0,
+            'admin_notes': self.admin_notes
         }
     
     def __repr__(self):
