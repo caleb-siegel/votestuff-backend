@@ -171,6 +171,16 @@ def update_product(current_user, product_id):
             else:
                 product.retailer_id = None
         
+        # Update brand if provided
+        if 'brand_id' in data:
+            if data['brand_id']:
+                brand = Retailer.query.get(uuid.UUID(data['brand_id']))
+                if not brand:
+                    return jsonify({'error': 'Brand not found'}), 404
+                product.brand_id = uuid.UUID(data['brand_id'])
+            else:
+                product.brand_id = None
+        
         db.session.commit()
         
         return jsonify({

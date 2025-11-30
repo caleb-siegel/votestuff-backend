@@ -135,6 +135,7 @@ def get_list(list_id):
         
         lst = List.query.options(
             joinedload(List.products).joinedload(Product.retailer),
+            joinedload(List.products).joinedload(Product.brand),
             joinedload(List.products).joinedload(Product.product_links).joinedload(ProductLink.retailer)
         ).get_or_404(uuid.UUID(list_id))
         
@@ -248,7 +249,8 @@ def create_list():
                 affiliate_url=product_data.get('affiliate_url'),
                 product_url=product_data.get('product_url'),
                 list_id=new_list.id,
-                rank=idx + 1  # Initial rank based on order
+                rank=idx + 1,  # Initial rank based on order
+                brand_id=uuid.UUID(product_data.get('brand_id')) if product_data.get('brand_id') else None
             )
             db.session.add(product)
             db.session.flush()  # Get the ID
@@ -418,7 +420,8 @@ def update_list(list_id):
                     affiliate_url=affiliate_url,
                     product_url=product_data.get('product_url'),
                     list_id=lst.id,
-                    rank=idx + 1
+                    rank=idx + 1,
+                    brand_id=uuid.UUID(product_data.get('brand_id')) if product_data.get('brand_id') else None
                 )
                 db.session.add(product)
                 db.session.flush()
@@ -524,6 +527,7 @@ def get_trending_lists():
     query = List.query.options(
         joinedload(List.category),
         joinedload(List.creator),
+        joinedload(List.products).joinedload(Product.brand),
         joinedload(List.products).joinedload(Product.product_links).joinedload(ProductLink.retailer)
     ).filter_by(status='approved')
     query = query.order_by(desc(List.total_votes))
