@@ -35,7 +35,7 @@ def share_list(list_id):
         
         # Construct frontend URL
         frontend_url = current_app.config.get('FRONTEND_URL', 'http://localhost:5173')
-        target_url = f"{frontend_url}/lists/{list_id}"
+        target_url = f"{frontend_url}/list/{list_id}"
         
         # HTML template with meta tags and redirect
         html = f"""

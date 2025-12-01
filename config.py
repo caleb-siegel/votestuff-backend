@@ -56,6 +56,7 @@ class Config:
     # Frontend URL for redirects
     FRONTEND_URL = os.environ.get('FRONTEND_URL') or 'http://localhost:5173'
 
+
 class DevelopmentConfig(Config):
     """Development configuration"""
     DEBUG = True
