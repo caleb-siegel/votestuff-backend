@@ -17,7 +17,7 @@ class List(db.Model):
     slug = db.Column(db.String(200), unique=True, nullable=False, index=True)
     
     # Foreign keys
-    creator_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    creator_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)
     category_id = db.Column(UUID(as_uuid=True), db.ForeignKey('categories.id'), nullable=True)
     
     # Status management
@@ -53,7 +53,7 @@ class List(db.Model):
             'title': self.title,
             'description': self.description,
             'slug': self.slug,
-            'creator_id': str(self.creator_id),
+            'creator_id': str(self.creator_id) if self.creator_id else None,
             'category_id': str(self.category_id) if self.category_id else None,
             'status': self.status,
             'view_count': self.view_count,

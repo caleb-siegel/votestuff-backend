@@ -193,20 +193,8 @@ def create_list():
     try:
         # Handle guest user creation if needed
         if is_guest or not creator_id:
-            # Create or find guest user
-            guest_email = f"guest_{uuid.uuid4().hex[:8]}@votestuff.guest"
-            guest_user = User.query.filter_by(email=guest_email).first()
-            if not guest_user:
-                guest_user = User(
-                    id=uuid.uuid4(),
-                    email=guest_email,
-                    display_name='Guest User',
-                    password_hash=None,
-                    is_active=False,  # Guest users are inactive
-                )
-                db.session.add(guest_user)
-                db.session.flush()  # Get the ID without committing
-            creator_id = str(guest_user.id)
+            # Guest submission - no user created
+            creator_id = None
         else:
             # Verify authenticated user exists
             creator_id = uuid.UUID(creator_id)

@@ -15,6 +15,7 @@ load_dotenv()
 from config import Config
 from models import db
 from routes import api_bp
+from routes.share import share_bp
 
 def create_app(config_class=Config):
     """Application factory pattern"""
@@ -57,6 +58,7 @@ def create_app(config_class=Config):
     
     # Register blueprints
     app.register_blueprint(api_bp, url_prefix='/api')
+    app.register_blueprint(share_bp, url_prefix='/api')
     
     # Initialize Flask-Migrate
     migrate = Migrate(app, db)
