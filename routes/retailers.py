@@ -20,7 +20,7 @@ def get_retailers():
     if search:
         query = query.filter(Retailer.name.ilike(f'%{search}%'))
     
-    retailers = query.order_by(Retailer.name).limit(50).all()
+    retailers = query.order_by(Retailer.name).limit(1000).all() #Limit is 1000 so if the retailer list ever grows beyond this, we need to increase it or make this more efficient somehow
     
     return jsonify({
         'retailers': [r.to_dict() for r in retailers]
