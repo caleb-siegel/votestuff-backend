@@ -150,7 +150,8 @@ def get_list(list_id):
         # which was calculated by update_list_ranking() based on votes.
         # Rank 1 = highest (best net score + upvote %), Rank 2 = second, etc.
         list_data['products'] = [product.to_dict() for product in lst.products]
-        list_data['creator'] = lst.creator.to_dict()
+        if lst.creator:
+            list_data['creator'] = lst.creator.to_dict()
         if lst.category:
             list_data['category'] = lst.category.to_dict()
         
