@@ -20,11 +20,12 @@ def get_pending_lists(current_user):
         lists_data = []
         for lst in pending_lists:
             list_dict = lst.to_dict()
-            # Include creator info
-            list_dict['creator'] = {
-                'id': str(lst.creator.id),
-                'display_name': lst.creator.display_name,
-                'email': lst.creator.email
+            if lst.creator:
+                # Include creator info
+                list_dict['creator'] = {
+                    'id': str(lst.creator.id),
+                    'display_name': lst.creator.display_name,
+                    'email': lst.creator.email
             }
             # Include full product details
             list_dict['products'] = [product.to_dict() for product in lst.products]
