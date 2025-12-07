@@ -25,6 +25,14 @@ flask db init
 flask db migrate -m "Initial migration"
 flask db upgrade
 ```
+1. Create and activate a virtual environment (recommended):
+```bash
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment
+source venv/bin/activate
+```
 
 5. Run the development server:
 ```bash
