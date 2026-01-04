@@ -98,8 +98,9 @@ def get_current_user():
 @api_bp.route('/auth/oauth', methods=['POST'])
 def oauth_login():
     """OAuth login (Google, Apple, etc.)"""
-    from google.auth.transport import requests
-    from google.oauth2 import id_token
+    import urllib.request
+    import urllib.error
+    import json
     import os
     
     data = request.get_json()
@@ -108,29 +109,38 @@ def oauth_login():
         return jsonify({'error': 'Provider and token required'}), 400
     
     provider = data.get('provider')
-    token = data.get('token')
+    access_token = data.get('token')
     
     if provider != 'google':
         return jsonify({'error': f'Provider {provider} not supported'}), 400
     
-    # Verify Google token
+    # Verify Google token and get user info
     try:
         google_client_id = os.environ.get('GOOGLE_CLIENT_ID')
         if not google_client_id:
-            return jsonify({'error': 'Google OAuth not configured'}), 500
+            print("ERROR: GOOGLE_CLIENT_ID not set in environment variables")
+            return jsonify({'error': 'Google OAuth not configured. Please set GOOGLE_CLIENT_ID in your .env file.'}), 500
         
-        # Verify the token
-        idinfo = id_token.verify_oauth2_token(token, requests.Request(), google_client_id)
+        # Use access token to fetch user info from Google
+        req = urllib.request.Request('https://www.googleapis.com/oauth2/v2/userinfo')
+        req.add_header('Authorization', f'Bearer {access_token}')
         
-        # Verify the issuer
-        if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
-            return jsonify({'error': 'Invalid token issuer'}), 401
+        try:
+            with urllib.request.urlopen(req) as response:
+                userinfo = json.loads(response.read().decode())
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                return jsonify({'error': 'Invalid or expired Google token'}), 401
+            return jsonify({'error': f'Failed to fetch user info: {e.code}'}), 500
         
         # Extract user info
-        google_id = idinfo['sub']
-        email = idinfo['email']
-        name = idinfo.get('name', email.split('@')[0])
-        picture = idinfo.get('picture')
+        google_id = userinfo.get('id')
+        email = userinfo.get('email')
+        name = userinfo.get('name', email.split('@')[0] if email else 'User')
+        picture = userinfo.get('picture')
+        
+        if not email or not google_id:
+            return jsonify({'error': 'Unable to retrieve user information from Google'}), 401
         
         # Check if user exists by OAuth ID or email
         user = User.query.filter(
@@ -173,7 +183,11 @@ def oauth_login():
         
     except ValueError as e:
         # Invalid token
-        return jsonify({'error': 'Invalid token'}), 401
+        print(f"OAuth ValueError: {str(e)}")
+        return jsonify({'error': f'Invalid Google token: {str(e)}'}), 401
     except Exception as e:
+        import traceback
+        print(f"OAuth Exception: {str(e)}")
+        print(traceback.format_exc())
         return jsonify({'error': f'OAuth verification failed: {str(e)}'}), 500
 

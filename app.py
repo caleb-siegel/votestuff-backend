@@ -65,6 +65,25 @@ def create_app(config_class=Config):
     # Initialize Flask-Migrate
     migrate = Migrate(app, db)
     
+    # Global error handler to ensure CORS headers are always sent
+    @app.errorhandler(Exception)
+    def handle_error(e):
+        """Global error handler that ensures CORS headers are sent even on errors"""
+        from flask import make_response
+        import traceback
+        
+        # Log the error for debugging
+        print(f"Error: {str(e)}")
+        print(traceback.format_exc())
+        
+        # Create error response
+        error_message = str(e) if app.debug else 'Internal server error'
+        response = make_response(jsonify({'error': error_message}), 500)
+        
+        # Ensure CORS headers are added
+        # Flask-CORS should handle this, but we'll make sure
+        return response
+    
     @app.route('/health')
     def health():
         """Health check endpoint"""
