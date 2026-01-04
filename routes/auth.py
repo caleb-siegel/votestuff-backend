@@ -98,9 +98,82 @@ def get_current_user():
 @api_bp.route('/auth/oauth', methods=['POST'])
 def oauth_login():
     """OAuth login (Google, Apple, etc.)"""
+    from google.auth.transport import requests
+    from google.oauth2 import id_token
+    import os
+    
     data = request.get_json()
     
-    # TODO: Implement OAuth verification
-    # This is a placeholder
-    return jsonify({'error': 'OAuth not yet implemented'}), 501
+    if not data or not data.get('provider') or not data.get('token'):
+        return jsonify({'error': 'Provider and token required'}), 400
+    
+    provider = data.get('provider')
+    token = data.get('token')
+    
+    if provider != 'google':
+        return jsonify({'error': f'Provider {provider} not supported'}), 400
+    
+    # Verify Google token
+    try:
+        google_client_id = os.environ.get('GOOGLE_CLIENT_ID')
+        if not google_client_id:
+            return jsonify({'error': 'Google OAuth not configured'}), 500
+        
+        # Verify the token
+        idinfo = id_token.verify_oauth2_token(token, requests.Request(), google_client_id)
+        
+        # Verify the issuer
+        if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+            return jsonify({'error': 'Invalid token issuer'}), 401
+        
+        # Extract user info
+        google_id = idinfo['sub']
+        email = idinfo['email']
+        name = idinfo.get('name', email.split('@')[0])
+        picture = idinfo.get('picture')
+        
+        # Check if user exists by OAuth ID or email
+        user = User.query.filter(
+            (User.oauth_id == google_id) | (User.email == email)
+        ).first()
+        
+        if user:
+            # Update OAuth info if needed
+            if not user.oauth_provider:
+                user.oauth_provider = 'google'
+                user.oauth_id = google_id
+            if picture and not user.profile_picture:
+                user.profile_picture = picture
+            if not user.display_name or user.display_name == email.split('@')[0]:
+                user.display_name = name
+            db.session.commit()
+        else:
+            # Create new user
+            new_user = User(
+                id=uuid.uuid4(),
+                email=email,
+                password_hash=None,  # OAuth users don't have passwords
+                display_name=name,
+                profile_picture=picture,
+                oauth_provider='google',
+                oauth_id=google_id
+            )
+            db.session.add(new_user)
+            db.session.commit()
+            user = new_user
+        
+        # Generate JWT token
+        token = generate_token(user.id, user.is_admin)
+        
+        return jsonify({
+            'message': 'OAuth login successful',
+            'token': token,
+            'user': user.to_dict()
+        }), 200
+        
+    except ValueError as e:
+        # Invalid token
+        return jsonify({'error': 'Invalid token'}), 401
+    except Exception as e:
+        return jsonify({'error': f'OAuth verification failed: {str(e)}'}), 500
 
