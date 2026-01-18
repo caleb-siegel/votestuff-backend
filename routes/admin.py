@@ -7,7 +7,7 @@ from . import api_bp
 from models import db, List, Product, ProductLink, User, ContactSubmission, Payout, Category, Retailer, AffiliateClick, Conversion, Vote
 from utils.auth_decorators import require_admin
 from datetime import datetime, timedelta
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, or_, nullslast
 import uuid
 
 @api_bp.route('/admin/lists/pending', methods=['GET'])
@@ -525,4 +525,221 @@ def get_payouts(current_user):
     return jsonify({
         'payouts': [payout.to_dict() for payout in payouts]
     })
+
+
+@api_bp.route('/admin/affiliate-clicks', methods=['GET'])
+@require_admin
+def get_affiliate_clicks(current_user):
+    """Get all affiliate clicks with pagination and joined data"""
+    try:
+        # Get query parameters for pagination
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        
+        # Get sort parameters
+        sort_by = request.args.get('sort_by', 'created_at').strip()
+        sort_order = request.args.get('sort_order', 'desc').strip().lower()
+        
+        # Validate sort parameters
+        valid_sort_columns = [
+            'created_at', 'converted_at', 'has_converted',
+            'user_email', 'user_display_name',
+            'product_name',
+            'list_title',
+            'retailer_name',
+            'conversion_revenue', 'conversion_commission', 'conversion_status'
+        ]
+        if sort_by not in valid_sort_columns:
+            sort_by = 'created_at'
+        
+        if sort_order not in ['asc', 'desc']:
+            sort_order = 'desc'
+        
+        # Get filter parameters
+        user_search = request.args.get('user_search', '').strip()
+        product_search = request.args.get('product_search', '').strip()
+        list_search = request.args.get('list_search', '').strip()
+        retailer_id = request.args.get('retailer_id', '').strip()
+        has_converted = request.args.get('has_converted', '').strip()
+        conversion_status = request.args.get('conversion_status', '').strip()
+        date_from = request.args.get('date_from', '').strip()
+        date_to = request.args.get('date_to', '').strip()
+        url_search = request.args.get('url_search', '').strip()
+        
+        # Build query with joins
+        query = db.session.query(
+            AffiliateClick,
+            User,
+            Product,
+            List,
+            ProductLink,
+            Retailer,
+            Conversion
+        ).outerjoin(
+            User, AffiliateClick.user_id == User.id
+        ).join(
+            Product, AffiliateClick.product_id == Product.id
+        ).join(
+            List, AffiliateClick.list_id == List.id
+        ).outerjoin(
+            ProductLink, AffiliateClick.product_link_id == ProductLink.id
+        ).outerjoin(
+            Retailer, ProductLink.retailer_id == Retailer.id
+        ).outerjoin(
+            Conversion, AffiliateClick.id == Conversion.click_id
+        )
+        
+        # Apply filters
+        if user_search:
+            query = query.filter(
+                or_(
+                    User.email.ilike(f'%{user_search}%'),
+                    User.display_name.ilike(f'%{user_search}%')
+                )
+            )
+        
+        if product_search:
+            query = query.filter(Product.name.ilike(f'%{product_search}%'))
+        
+        if list_search:
+            query = query.filter(
+                or_(
+                    List.title.ilike(f'%{list_search}%'),
+                    List.slug.ilike(f'%{list_search}%')
+                )
+            )
+        
+        if retailer_id:
+            try:
+                retailer_uuid = uuid.UUID(retailer_id)
+                query = query.filter(Retailer.id == retailer_uuid)
+            except ValueError:
+                pass  # Invalid UUID, ignore filter
+        
+        if has_converted:
+            if has_converted.lower() == 'true':
+                query = query.filter(AffiliateClick.has_converted == True)
+            elif has_converted.lower() == 'false':
+                query = query.filter(AffiliateClick.has_converted == False)
+        
+        if conversion_status:
+            query = query.filter(Conversion.status == conversion_status)
+        
+        if date_from:
+            try:
+                # HTML date input returns YYYY-MM-DD format
+                from_date = datetime.strptime(date_from, '%Y-%m-%d')
+                query = query.filter(AffiliateClick.created_at >= from_date)
+            except (ValueError, TypeError):
+                pass  # Invalid date, ignore filter
+        
+        if date_to:
+            try:
+                # HTML date input returns YYYY-MM-DD format
+                to_date = datetime.strptime(date_to, '%Y-%m-%d')
+                # Add one day to include the entire end date
+                to_date = to_date + timedelta(days=1)
+                query = query.filter(AffiliateClick.created_at < to_date)
+            except (ValueError, TypeError):
+                pass  # Invalid date, ignore filter
+        
+        if url_search:
+            query = query.filter(AffiliateClick.url.ilike(f'%{url_search}%'))
+        
+        # Apply sorting
+        if sort_by == 'created_at':
+            order_column = AffiliateClick.created_at
+        elif sort_by == 'converted_at':
+            order_column = AffiliateClick.converted_at
+        elif sort_by == 'has_converted':
+            order_column = AffiliateClick.has_converted
+        elif sort_by == 'user_email':
+            order_column = User.email
+        elif sort_by == 'user_display_name':
+            order_column = User.display_name
+        elif sort_by == 'product_name':
+            order_column = Product.name
+        elif sort_by == 'list_title':
+            order_column = List.title
+        elif sort_by == 'retailer_name':
+            order_column = Retailer.name
+        elif sort_by == 'conversion_revenue':
+            order_column = Conversion.revenue
+        elif sort_by == 'conversion_commission':
+            order_column = Conversion.commission
+        elif sort_by == 'conversion_status':
+            order_column = Conversion.status
+        else:
+            order_column = AffiliateClick.created_at
+        
+        # Apply sort order
+        if sort_order == 'asc':
+            query = query.order_by(nullslast(order_column.asc()))
+        else:
+            query = query.order_by(nullslast(order_column.desc()))
+        
+        # Paginate
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        # Build response data
+        clicks_data = []
+        for click, user, product, list_obj, product_link, retailer, conversion in pagination.items:
+            click_dict = {
+                'id': str(click.id),
+                'url': click.url,
+                'has_converted': click.has_converted,
+                'created_at': click.created_at.isoformat() if click.created_at else None,
+                'converted_at': click.converted_at.isoformat() if click.converted_at else None,
+                'session_id': click.session_id,
+                'ip_address': click.ip_address,
+                'user_agent': click.user_agent,
+                'referrer': click.referrer,
+                'user': {
+                    'id': str(user.id),
+                    'email': user.email,
+                    'display_name': user.display_name
+                } if user else None,
+                'product': {
+                    'id': str(product.id),
+                    'name': product.name,
+                    'image_url': product.image_url
+                } if product else None,
+                'list': {
+                    'id': str(list_obj.id),
+                    'title': list_obj.title,
+                    'slug': list_obj.slug
+                } if list_obj else None,
+                'product_link': {
+                    'id': str(product_link.id),
+                    'url': product_link.url,
+                    'link_name': product_link.link_name,
+                    'price': float(product_link.price) if product_link.price else None
+                } if product_link else None,
+                'retailer': {
+                    'id': str(retailer.id),
+                    'name': retailer.name,
+                    'logo_url': retailer.logo_url
+                } if retailer else None,
+                'conversion': {
+                    'id': str(conversion.id),
+                    'revenue': float(conversion.revenue) if conversion.revenue else None,
+                    'commission': float(conversion.commission) if conversion.commission else None,
+                    'status': conversion.status,
+                    'converted_at': conversion.converted_at.isoformat() if conversion.converted_at else None
+                } if conversion else None
+            }
+            clicks_data.append(click_dict)
+        
+        return jsonify({
+            'clicks': clicks_data,
+            'total': pagination.total,
+            'page': page,
+            'per_page': per_page,
+            'pages': pagination.pages
+        })
+    except Exception as e:
+        import traceback
+        print(f"Error fetching affiliate clicks: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
 
