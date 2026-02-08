@@ -743,3 +743,152 @@ def get_affiliate_clicks(current_user):
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+
+@api_bp.route('/admin/conversions', methods=['GET'])
+@require_admin
+def get_admin_conversions(current_user):
+    """Get all conversions with pagination and joined data"""
+    try:
+        # Get query parameters for pagination
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        
+        # Get sort parameters
+        sort_by = request.args.get('sort_by', 'converted_at').strip()
+        sort_order = request.args.get('sort_order', 'desc').strip().lower()
+        
+        # Validate sort parameters
+        valid_sort_columns = [
+            'converted_at', 'created_at', 'revenue', 'commission', 
+            'status', 'network', 'list_title', 'product_name'
+        ]
+        if sort_by not in valid_sort_columns:
+            sort_by = 'converted_at'
+        
+        if sort_order not in ['asc', 'desc']:
+            sort_order = 'desc'
+        
+        # Get filter parameters
+        status = request.args.get('status', '').strip()
+        network = request.args.get('network', '').strip()
+        list_search = request.args.get('list_search', '').strip()
+        date_from = request.args.get('date_from', '').strip()
+        date_to = request.args.get('date_to', '').strip()
+        
+        # Build query with joins
+        query = db.session.query(
+            Conversion,
+            List,
+            Product,
+            AffiliateClick,
+            User
+        ).join(
+            List, Conversion.list_id == List.id
+        ).outerjoin(
+            Product, Conversion.product_id == Product.id
+        ).outerjoin(
+            AffiliateClick, Conversion.click_id == AffiliateClick.id
+        ).outerjoin(
+            User, AffiliateClick.user_id == User.id
+        )
+        
+        # Apply filters
+        if status and status != '__all__':
+            query = query.filter(Conversion.status == status)
+            
+        if network and network != '__all__':
+            query = query.filter(Conversion.network == network)
+            
+        if list_search:
+            query = query.filter(List.title.ilike(f'%{list_search}%'))
+            
+        if date_from:
+            try:
+                from_date = datetime.strptime(date_from, '%Y-%m-%d')
+                query = query.filter(Conversion.converted_at >= from_date)
+            except (ValueError, TypeError):
+                pass
+        
+        if date_to:
+            try:
+                to_date = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+                query = query.filter(Conversion.converted_at < to_date)
+            except (ValueError, TypeError):
+                pass
+        
+        # Apply sorting
+        if sort_by == 'converted_at':
+            order_column = Conversion.converted_at
+        elif sort_by == 'created_at':
+            order_column = Conversion.created_at
+        elif sort_by == 'revenue':
+            order_column = Conversion.revenue
+        elif sort_by == 'commission':
+            order_column = Conversion.commission
+        elif sort_by == 'status':
+            order_column = Conversion.status
+        elif sort_by == 'network':
+            order_column = Conversion.network
+        elif sort_by == 'list_title':
+            order_column = List.title
+        elif sort_by == 'product_name':
+            order_column = Product.name
+        else:
+            order_column = Conversion.converted_at
+            
+        # Apply sort order
+        if sort_order == 'asc':
+            query = query.order_by(nullslast(order_column.asc()))
+        else:
+            query = query.order_by(nullslast(order_column.desc()))
+            
+        # Paginate
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        # Build response data
+        conversions_data = []
+        for conv, list_obj, product, click, user in pagination.items:
+            conv_dict = conv.to_dict()
+            
+            # Add related data
+            conv_dict['list'] = {
+                'id': str(list_obj.id),
+                'title': list_obj.title,
+                'slug': list_obj.slug
+            }
+            
+            if product:
+                conv_dict['product'] = {
+                    'id': str(product.id),
+                    'name': product.name,
+                    'image_url': product.image_url
+                }
+                
+            if click:
+                conv_dict['click'] = {
+                    'id': str(click.id),
+                    'url': click.url,
+                    'created_at': click.created_at.isoformat()
+                }
+                if user:
+                    conv_dict['user'] = {
+                        'id': str(user.id),
+                        'display_name': user.display_name,
+                        'email': user.email
+                    }
+            
+            conversions_data.append(conv_dict)
+            
+        return jsonify({
+            'conversions': conversions_data,
+            'total': pagination.total,
+            'page': page,
+            'per_page': per_page,
+            'pages': pagination.pages
+        })
+        
+    except Exception as e:
+        import traceback
+        print(f"Error fetching admin conversions: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500

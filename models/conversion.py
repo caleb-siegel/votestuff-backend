@@ -16,7 +16,7 @@ class Conversion(db.Model):
     # Foreign keys
     click_id = db.Column(UUID(as_uuid=True), db.ForeignKey('affiliate_clicks.id'), nullable=True)
     list_id = db.Column(UUID(as_uuid=True), db.ForeignKey('lists.id'), nullable=False)
-    product_id = db.Column(UUID(as_uuid=True), db.ForeignKey('products.id'), nullable=False)
+    product_id = db.Column(UUID(as_uuid=True), db.ForeignKey('products.id'), nullable=True)
     purchaser_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)  # User who made the purchase
     
     # Conversion data
@@ -56,7 +56,7 @@ class Conversion(db.Model):
             'id': str(self.id),
             'click_id': str(self.click_id) if self.click_id else None,
             'list_id': str(self.list_id),
-            'product_id': str(self.product_id),
+            'product_id': str(self.product_id) if self.product_id else None,
             'purchaser_id': str(self.purchaser_id) if self.purchaser_id else None,
             'revenue': float(self.revenue) if self.revenue else 0,
             'commission': float(self.commission) if self.commission else 0,

@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from config import Config
 import uuid
+from utils.auth_decorators import require_admin
 
 # Configuration for cashback and creator payout percentages
 # These can be configured via environment variables in config.py
@@ -182,57 +183,207 @@ def conversion_webhook():
         
         db.session.add(conversion)
         
-        # Calculate cashback amount
-        cashback_amount = (conversion.commission * conversion.cashback_percentage) / Decimal('100')
-        
-        # Create cashback payout for the user who clicked (clicker gets cashback)
-        # This is the attribution - the clicker gets rewarded, not necessarily the purchaser
-        if clicker_user_id:
-            cashback_payout = Payout(
-                id=uuid.uuid4(),
-                user_id=clicker_user_id,  # User who clicked gets cashback
-                list_id=list_id,
-                conversion_id=conversion.id,
-                payout_type='cashback',
-                amount=cashback_amount,
-                status='pending',
-                currency=conversion.currency
-            )
-            
-            db.session.add(cashback_payout)
-        
-        # Calculate creator payout amount
-        creator_payout_amount = (conversion.commission * conversion.creator_payout_percentage) / Decimal('100')
-        
-        # Create payout record for list creator
-        if lst.creator_id:
-            creator_payout = Payout(
-                id=uuid.uuid4(),
-                user_id=lst.creator_id,
-                list_id=list_id,
-                conversion_id=conversion.id,
-                payout_type='creator',
-                amount=creator_payout_amount,
-                status='pending',
-                currency=conversion.currency
-            )
-            
-            db.session.add(creator_payout)
+        create_payouts_for_conversion(
+            conversion, 
+            clicker_user_id, 
+            lst.creator_id, 
+            lst.id
+        )
         
         db.session.commit()
         
         return jsonify({
             'message': 'Conversion processed',
-            'conversion_id': str(conversion.id),
-            'purchaser_id': str(purchaser_id) if purchaser_id else None,
-            'clicker_user_id': str(clicker_user_id) if clicker_user_id else None,
-            'cashback_amount': float(cashback_amount) if clicker_user_id else None,
-            'creator_payout_amount': float(creator_payout_amount) if lst.creator_id else None
+            'conversion_id': str(conversion.id)
         }), 201
         
     except Exception as e:
         db.session.rollback()
+        import traceback
+        print(f"Error processing conversion webhook: {str(e)}")
+        print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
+
+
+def create_payouts_for_conversion(conversion, clicker_user_id, list_creator_id, list_id):
+    """
+    Helper function to create cashback and creator payouts for a conversion
+    """
+    payouts_created = []
+    
+    # Calculate cashback amount
+    if conversion.cashback_percentage:
+        cashback_amount = (conversion.commission * conversion.cashback_percentage) / Decimal('100')
+        
+        # Create cashback payout for the user who clicked (clicker gets cashback)
+        if clicker_user_id:
+            cashback_payout = Payout(
+                id=uuid.uuid4(),
+                user_id=clicker_user_id,
+                list_id=list_id,
+                conversion_id=conversion.id,
+                payout_type='cashback',
+                amount=cashback_amount,
+                status='pending',
+                currency=conversion.currency or 'USD'
+            )
+            
+            db.session.add(cashback_payout)
+            payouts_created.append('cashback')
+    
+    # Calculate creator payout amount
+    if conversion.creator_payout_percentage:
+        creator_payout_amount = (conversion.commission * conversion.creator_payout_percentage) / Decimal('100')
+        
+        # Create payout record for list creator
+        if list_creator_id:
+            creator_payout = Payout(
+                id=uuid.uuid4(),
+                user_id=list_creator_id,
+                list_id=list_id,
+                conversion_id=conversion.id,
+                payout_type='creator',
+                amount=creator_payout_amount,
+                status='pending',
+                currency=conversion.currency or 'USD'
+            )
+            
+            db.session.add(creator_payout)
+            payouts_created.append('creator')
+            
+    return payouts_created
+
+@api_bp.route('/conversions/manual', methods=['POST'])
+@require_admin
+def create_manual_conversion(current_user):
+    """
+    Manually create a conversion (admin only)
+    
+    Can link to:
+    1. An existing click (using click_id) - preferred, maintains attribution
+    2. A list (using list_id) - fallback if no click tracked
+    """
+    try:
+        data = request.get_json()
+        
+        # Required fields
+        revenue = data.get('revenue')
+        commission = data.get('commission')
+        
+        if revenue is None or commission is None:
+            return jsonify({'error': 'Revenue and commission are required'}), 400
+            
+        # Optional fields with defaults
+        network = data.get('network', 'manual')
+        external_id = data.get('external_id') or f"manual-{uuid.uuid4().hex[:8]}"
+        currency = data.get('currency', 'USD')
+        
+        # Parse timestamp
+        converted_at = datetime.utcnow()
+        if data.get('converted_at'):
+            try:
+                converted_at = datetime.fromisoformat(data['converted_at'].replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                pass
+        
+        # Attribution logic
+        click = None
+        list_obj = None
+        product = None
+        clicker_user_id = None
+        
+        # Option 1: Link to existing click
+        if data.get('click_id'):
+            try:
+                click_id = uuid.UUID(data['click_id'])
+                click = AffiliateClick.query.get(click_id)
+                if not click:
+                    return jsonify({'error': 'Click not found'}), 404
+                
+                # Use click data
+                list_obj = List.query.get(click.list_id)
+                product = Product.query.get(click.product_id)
+                clicker_user_id = click.user_id
+                
+                # Mark click as converted
+                click.has_converted = True
+                click.converted_at = converted_at
+                
+            except ValueError:
+                return jsonify({'error': 'Invalid click_id format'}), 400
+        
+        # Option 2: Link directly to list
+        elif data.get('list_id'):
+            try:
+                list_id = uuid.UUID(data['list_id'])
+                list_obj = List.query.get(list_id)
+                if not list_obj:
+                    return jsonify({'error': 'List not found'}), 404
+                
+                # Optional product
+                if data.get('product_id'):
+                    product_id = uuid.UUID(data['product_id'])
+                    product = Product.query.get(product_id)
+                
+            except ValueError:
+                return jsonify({'error': 'Invalid list_id or product_id format'}), 400
+        else:
+            return jsonify({'error': 'Must provide either click_id or list_id'}), 400
+            
+        # Create conversion
+        conversion = Conversion(
+            id=uuid.uuid4(),
+            click_id=click.id if click else None,
+            list_id=list_obj.id,
+            product_id=product.id if product else None,
+            purchaser_id=None, # Manual entry usually doesn't know purchaser
+            revenue=Decimal(str(revenue)),
+            commission=Decimal(str(commission)),
+            commission_rate=Decimal(str(data.get('commission_rate', 0))),
+            currency=currency,
+            network=network,
+            external_id=external_id,
+            converted_at=converted_at,
+            status='approved', # Manual entries are implicitly approved
+            approved_at=datetime.utcnow(),
+            # Set payout percentages
+            cashback_percentage=DEFAULT_CASHBACK_PERCENTAGE,
+            creator_payout_percentage=DEFAULT_CREATOR_PAYOUT_PERCENTAGE
+        )
+        
+        db.session.add(conversion)
+        
+        # Create payouts
+        payouts = create_payouts_for_conversion(
+            conversion, 
+            clicker_user_id, 
+            list_obj.creator_id, 
+            list_obj.id
+        )
+        
+        # Since manual conversions are approved, update payout status
+        if payouts:
+            db.session.flush() # Get IDs
+            generated_payouts = Payout.query.filter_by(conversion_id=conversion.id).all()
+            for p in generated_payouts:
+                p.status = 'processing'
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Conversion created successfully',
+            'conversion': conversion.to_dict(),
+            'payouts_generated': payouts
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        print(f"Error creating manual conversion: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
 
 
 @api_bp.route('/conversions/<conversion_id>/approve', methods=['POST'])
@@ -315,6 +466,41 @@ def mark_conversion_paid(conversion_id):
         return jsonify({
             'message': f'Conversion marked as paid, {paid_count} payouts processed',
             'total_cashback_paid': float(total_cashback_paid)
+        }), 200
+        
+    except ValueError:
+        return jsonify({'error': 'Invalid conversion ID'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/conversions/<conversion_id>/reject', methods=['POST'])
+@require_admin
+def reject_conversion(conversion_id):
+    """
+    Reject a conversion (invalid, returned, etc)
+    Cancels the conversion and any pending/processing payouts
+    """
+    try:
+        conversion = Conversion.query.get_or_404(uuid.UUID(conversion_id))
+        
+        # Update conversion status
+        conversion.status = 'rejected'
+        
+        # Cancel all payouts for this conversion that haven't been paid
+        payouts = Payout.query.filter(
+            Payout.conversion_id == conversion.id,
+            Payout.status.in_(['pending', 'processing'])
+        ).all()
+        
+        for payout in payouts:
+            payout.status = 'cancelled'
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Conversion rejected, {len(payouts)} payouts cancelled'
         }), 200
         
     except ValueError:

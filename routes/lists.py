@@ -54,6 +54,35 @@ def get_all_descendant_ids(category_id):
     collect_descendants(category_id)
     return descendant_ids
 
+
+@api_bp.route('/lists/search', methods=['GET'])
+def search_lists():
+    """
+    Search for lists by title
+    Public endpoint for autocomplete
+    """
+    try:
+        query_str = request.args.get('q', '').strip()
+        
+        if not query_str or len(query_str) < 2:
+            return jsonify({'lists': []}), 200
+            
+        lists = List.query.filter(
+            List.title.ilike(f'%{query_str}%'),
+            List.status == 'approved' # Only search approved lists for attribution
+        ).limit(10).all()
+        
+        return jsonify({
+            'lists': [{
+                'id': str(lst.id),
+                'title': lst.title,
+                'slug': lst.slug
+            } for lst in lists]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @api_bp.route('/lists', methods=['GET'])
 def get_lists():
     """Get lists with filters"""
