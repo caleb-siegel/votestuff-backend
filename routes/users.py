@@ -4,7 +4,7 @@ User routes
 
 from flask import request, jsonify
 from . import api_bp
-from models import db, User, List, Payout, Conversion
+from models import db, User, List, Payout, Conversion, AffiliateClick
 from sqlalchemy import desc, or_
 from datetime import datetime
 import uuid
@@ -177,3 +177,202 @@ def get_cashback_transaction(user_id, transaction_id):
         return jsonify({'error': str(e)}), 500
 
 
+@api_bp.route('/users/<user_id>/dashboard', methods=['GET'])
+def get_user_dashboard(user_id):
+    """Get user dashboard stats for list creators"""
+    try:
+        user = User.query.get_or_404(uuid.UUID(user_id))
+        
+        # Get all lists created by user
+        user_lists = List.query.filter_by(creator_id=user.id).order_by(desc(List.created_at)).all()
+        
+        lists_data = []
+        total_views = 0
+        total_clicks = 0
+        total_conversions = 0
+        total_revenue = 0
+        total_earnings = 0
+        pending_earnings = 0
+        paid_earnings = 0
+        
+        for lst in user_lists:
+            # Get stats for this list
+            # Clicks
+            clicks_count = db.session.query(db.func.count(AffiliateClick.id)).filter(
+                AffiliateClick.list_id == lst.id
+            ).scalar() or 0
+            
+            # Conversions
+            # Calculate count and total revenue
+            conversions_data = db.session.query(
+                db.func.count(Conversion.id),
+                db.func.sum(Conversion.revenue)
+            ).filter(
+                Conversion.list_id == lst.id
+            ).first()
+            
+            conversions_count = conversions_data[0] or 0
+            list_revenue = float(conversions_data[1]) if conversions_data[1] else 0.0
+            
+            # Commission (Payouts for creator)
+            payouts = Payout.query.filter_by(
+                list_id=lst.id,
+                payout_type='creator'
+            ).all()
+            
+            list_earnings = sum(float(p.amount) for p in payouts)
+            list_pending = sum(float(p.amount) for p in payouts if p.status == 'pending')
+            list_processing = sum(float(p.amount) for p in payouts if p.status == 'processing')
+            list_paid = sum(float(p.amount) for p in payouts if p.status == 'paid')
+            list_failed = sum(float(p.amount) for p in payouts if p.status in ['failed', 'cancelled'])
+            
+            # Add to totals
+            total_views += lst.view_count
+            total_clicks += clicks_count
+            total_conversions += conversions_count
+            total_revenue += list_revenue
+            total_earnings += list_earnings
+            pending_earnings += list_pending
+            
+            # Add list data
+            lists_data.append({
+                'id': str(lst.id),
+                'title': lst.title,
+                'slug': lst.slug,
+                'status': lst.status,
+                'created_at': lst.created_at.isoformat(),
+                'view_count': lst.view_count,
+                'click_count': clicks_count,
+                'conversion_count': conversions_count,
+                'revenue': list_revenue,
+                'earnings': list_earnings,
+                'pending_earnings': list_pending,
+                'paid_earnings': list_paid,
+                'product_count': len(lst.products) if lst.products else 0
+            })
+            
+        # Chart Data: Performance History (Daily Stats for last 30 days)
+        # ... (Previous code for performance history) ...
+        from datetime import timedelta
+        
+        end_date = datetime.utcnow().date()
+        start_date = end_date - timedelta(days=29)
+        
+        # Initialize daily stats structure
+        # Format: [{'date': 'YYYY-MM-DD', 'list_id_clicks': 0, 'list_id_conversions': 0, 'list_id_commission': 0, ...}]
+        performance_history = []
+        date_map = {}
+        
+        current_date = start_date
+        while current_date <= end_date:
+            date_str = current_date.isoformat()
+            entry = {'date': date_str}
+            # Initialize all lists to 0
+            for lst in user_lists:
+                lid = str(lst.id)
+                entry[f"{lid}_clicks"] = 0
+                entry[f"{lid}_conversions"] = 0
+                entry[f"{lid}_commission"] = 0
+            performance_history.append(entry)
+            date_map[date_str] = entry
+            current_date += timedelta(days=1)
+            
+        list_ids = [lst.id for lst in user_lists]
+        if list_ids:
+            # 1. Query Daily Clicks
+            clicks_daily = db.session.query(
+                db.func.date(AffiliateClick.created_at).label('date'),
+                AffiliateClick.list_id,
+                db.func.count(AffiliateClick.id)
+            ).filter(
+                AffiliateClick.list_id.in_(list_ids),
+                AffiliateClick.created_at >= start_date
+            ).group_by(
+                db.func.date(AffiliateClick.created_at),
+                AffiliateClick.list_id
+            ).all()
+            
+            for date_val, list_id, count in clicks_daily:
+                date_str = str(date_val)
+                if date_str in date_map:
+                    date_map[date_str][f"{str(list_id)}_clicks"] = count
+
+            # 2. Query Daily Conversions
+            conversions_daily = db.session.query(
+                db.func.date(Conversion.created_at).label('date'),
+                Conversion.list_id,
+                db.func.count(Conversion.id)
+            ).filter(
+                Conversion.list_id.in_(list_ids),
+                Conversion.created_at >= start_date
+            ).group_by(
+                db.func.date(Conversion.created_at),
+                Conversion.list_id
+            ).all()
+            
+            for date_val, list_id, count in conversions_daily:
+                date_str = str(date_val)
+                if date_str in date_map:
+                    date_map[date_str][f"{str(list_id)}_conversions"] = count
+
+            # 3. Query Daily Commission (Payouts)
+            commission_daily = db.session.query(
+                db.func.date(Payout.created_at).label('date'),
+                Payout.list_id,
+                db.func.sum(Payout.amount)
+            ).filter(
+                Payout.list_id.in_(list_ids),
+                Payout.payout_type == 'creator',
+                Payout.created_at >= start_date
+            ).group_by(
+                db.func.date(Payout.created_at),
+                Payout.list_id
+            ).all()
+            
+            for date_val, list_id, amount in commission_daily:
+                date_str = str(date_val)
+                if date_str in date_map:
+                     # Convert Decimal to float for JSON serialization
+                    date_map[date_str][f"{str(list_id)}_commission"] = float(amount) if amount else 0.0
+
+        # Calculate Aggregated Earnings by Status across all lists
+        # We need to sum up payouts for ALL user lists
+        all_creator_payouts = Payout.query.filter(
+            Payout.list_id.in_(list_ids) if list_ids else False,
+            Payout.payout_type == 'creator'
+        ).all()
+        
+        agg_pending = sum(float(p.amount) for p in all_creator_payouts if p.status == 'pending')
+        agg_processing = sum(float(p.amount) for p in all_creator_payouts if p.status == 'processing')
+        agg_paid = sum(float(p.amount) for p in all_creator_payouts if p.status == 'paid')
+        agg_failed = sum(float(p.amount) for p in all_creator_payouts if p.status in ['failed', 'cancelled'])
+
+        # Chart Data: Earnings Breakdown
+        earnings_breakdown = [
+            {'name': 'Pending', 'value': agg_pending, 'fill': '#fbbf24'},    # amber-400
+            {'name': 'Processing', 'value': agg_processing, 'fill': '#3b82f6'}, # blue-500
+            {'name': 'Paid', 'value': agg_paid, 'fill': '#22c55e'},         # green-500
+            {'name': 'Failed', 'value': agg_failed, 'fill': '#ef4444'},     # red-500
+        ]
+            
+        return jsonify({
+            'overview': {
+                'total_lists': len(user_lists),
+                'total_views': total_views,
+                'total_clicks': total_clicks,
+                'total_conversions': total_conversions,
+                'total_revenue': total_revenue, 
+                'total_earnings': total_earnings,
+                'pending_earnings': pending_earnings,
+                'paid_earnings': paid_earnings, # Leaving strict paid_earnings in overview for quick access
+                'currency': 'USD'
+            },
+            'lists': lists_data,
+            'performance_history': performance_history,
+            'earnings_breakdown': earnings_breakdown
+        })
+        
+    except ValueError:
+        return jsonify({'error': 'Invalid user ID'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
