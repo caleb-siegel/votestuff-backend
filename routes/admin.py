@@ -453,7 +453,7 @@ def get_dashboard_analytics(current_user):
         recent_conversions_query = Conversion.query.order_by(desc(Conversion.converted_at)).limit(10).all()
         recent_conversions_data = [conv.to_dict() for conv in recent_conversions_query]
         
-        # Daily clicks and conversions for the last 30 days
+        # Daily clicks, conversions, and votes for the last 30 days
         daily_stats = []
         for i in range(30):
             day = datetime.utcnow() - timedelta(days=i)
@@ -470,10 +470,16 @@ def get_dashboard_analytics(current_user):
                 Conversion.converted_at < day_end
             ).count()
             
+            day_votes = Vote.query.filter(
+                Vote.created_at >= day_start,
+                Vote.created_at < day_end
+            ).count()
+            
             daily_stats.append({
                 'date': day_start.strftime('%Y-%m-%d'),
                 'clicks': day_clicks,
-                'conversions': day_conversions
+                'conversions': day_conversions,
+                'votes': day_votes
             })
         
         daily_stats.reverse()  # Oldest to newest
