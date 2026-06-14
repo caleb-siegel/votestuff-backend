@@ -162,11 +162,23 @@ def get_list(list_id):
         from models.product_link import ProductLink
         from models.retailer import Retailer
         
-        lst = List.query.options(
-            joinedload(List.products).joinedload(Product.retailer),
-            joinedload(List.products).joinedload(Product.brand),
-            joinedload(List.products).joinedload(Product.product_links).joinedload(ProductLink.retailer)
-        ).get_or_404(uuid.UUID(list_id))
+        try:
+            list_uuid = uuid.UUID(list_id)
+            lst = List.query.options(
+                joinedload(List.products).joinedload(Product.retailer),
+                joinedload(List.products).joinedload(Product.brand),
+                joinedload(List.products).joinedload(Product.product_links).joinedload(ProductLink.retailer)
+            ).get(list_uuid)
+        except ValueError:
+            lst = List.query.options(
+                joinedload(List.products).joinedload(Product.retailer),
+                joinedload(List.products).joinedload(Product.brand),
+                joinedload(List.products).joinedload(Product.product_links).joinedload(ProductLink.retailer)
+            ).filter_by(slug=list_id).first()
+            
+        if not lst:
+            return jsonify({'error': 'List not found'}), 404
+
         
         # Increment view count (analytics tracking)
         lst.view_count += 1
@@ -185,8 +197,8 @@ def get_list(list_id):
             list_data['category'] = lst.category.to_dict()
         
         return jsonify(list_data)
-    except ValueError:
-        return jsonify({'error': 'Invalid list ID'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/lists', methods=['POST'])
 def create_list():
@@ -379,7 +391,14 @@ def update_list(list_id):
     import re
     
     try:
-        lst = List.query.get_or_404(uuid.UUID(list_id))
+        try:
+            list_uuid = uuid.UUID(list_id)
+            lst = List.query.get(list_uuid)
+        except ValueError:
+            lst = List.query.filter_by(slug=list_id).first()
+            
+        if not lst:
+            return jsonify({'error': 'List not found'}), 404
         data = request.get_json()
         
         # TODO: Add authentication check to ensure user is the creator

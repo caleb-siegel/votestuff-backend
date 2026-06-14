@@ -15,10 +15,18 @@ def share_list(list_id):
     Serve a page with Open Graph tags for a list, then redirect to the frontend.
     """
     try:
-        # Fetch list with products to get the top image
-        lst = List.query.options(
-            joinedload(List.products)
-        ).get_or_404(uuid.UUID(list_id))
+        try:
+            list_uuid = uuid.UUID(list_id)
+            lst = List.query.options(
+                joinedload(List.products)
+            ).get(list_uuid)
+        except ValueError:
+            lst = List.query.options(
+                joinedload(List.products)
+            ).filter_by(slug=list_id).first()
+            
+        if not lst:
+            return "List not found", 404
         
         # Determine the image to show
         # 1. Top ranked product image
@@ -35,7 +43,7 @@ def share_list(list_id):
         
         # Construct frontend URL
         frontend_url = current_app.config.get('FRONTEND_URL', 'http://localhost:5173')
-        target_url = f"{frontend_url}/list/{list_id}"
+        target_url = f"{frontend_url}/list/{lst.slug}"
         
         # HTML template with meta tags and redirect
         html = f"""

@@ -27,7 +27,14 @@ def add_product(list_id):
     
     try:
         # Verify list exists
-        lst = List.query.get_or_404(uuid.UUID(list_id))
+        try:
+            list_uuid = uuid.UUID(list_id)
+            lst = List.query.get(list_uuid)
+        except ValueError:
+            lst = List.query.filter_by(slug=list_id).first()
+            
+        if not lst:
+            return jsonify({'error': 'List not found'}), 404
         
         new_product = Product(
             id=uuid.uuid4(),
@@ -36,7 +43,7 @@ def add_product(list_id):
             image_url=data.get('image_url'),
             affiliate_url=data.get('affiliate_url'),
             product_url=data.get('product_url'),
-            list_id=list_id
+            list_id=lst.id
         )
         db.session.add(new_product)
         db.session.commit()

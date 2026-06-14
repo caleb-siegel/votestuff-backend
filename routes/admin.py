@@ -45,7 +45,14 @@ def admin_update_list(current_user, list_id):
     """Update a list (title, description, category, status, notes)"""
     try:
         data = request.get_json()
-        lst = List.query.get_or_404(uuid.UUID(list_id))
+        try:
+            list_uuid = uuid.UUID(list_id)
+            lst = List.query.get(list_uuid)
+        except ValueError:
+            lst = List.query.filter_by(slug=list_id).first()
+            
+        if not lst:
+            return jsonify({'error': 'List not found'}), 404
         
         # Update title if provided
         if 'title' in data:
@@ -94,7 +101,14 @@ def approve_list(current_user, list_id):
     """Approve a list"""
     try:
         data = request.get_json() or {}
-        lst = List.query.get_or_404(uuid.UUID(list_id))
+        try:
+            list_uuid = uuid.UUID(list_id)
+            lst = List.query.get(list_uuid)
+        except ValueError:
+            lst = List.query.filter_by(slug=list_id).first()
+            
+        if not lst:
+            return jsonify({'error': 'List not found'}), 404
         
         # Set category if provided
         if 'category_id' in data and data['category_id']:
@@ -126,7 +140,14 @@ def reject_list(current_user, list_id):
     """Reject a list"""
     try:
         data = request.get_json()
-        lst = List.query.get_or_404(uuid.UUID(list_id))
+        try:
+            list_uuid = uuid.UUID(list_id)
+            lst = List.query.get(list_uuid)
+        except ValueError:
+            lst = List.query.filter_by(slug=list_id).first()
+            
+        if not lst:
+            return jsonify({'error': 'List not found'}), 404
         lst.status = 'rejected'
         lst.admin_notes = data.get('notes')
         db.session.commit()
