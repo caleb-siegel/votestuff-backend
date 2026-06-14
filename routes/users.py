@@ -240,7 +240,7 @@ def get_user_dashboard(user_id):
                 'title': lst.title,
                 'slug': lst.slug,
                 'status': lst.status,
-                'created_at': lst.created_at.isoformat(),
+                'created_at': lst.created_at.isoformat() + 'Z' if lst.created_at else None,
                 'view_count': lst.view_count,
                 'click_count': clicks_count,
                 'conversion_count': conversions_count,

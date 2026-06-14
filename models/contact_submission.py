@@ -35,7 +35,7 @@ class ContactSubmission(db.Model):
             'subject': self.subject,
             'message': self.message,
             'status': self.status,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
         }
     
     def __repr__(self):

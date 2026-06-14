@@ -78,7 +78,7 @@ class User(db.Model):
             'is_admin': self.is_admin,
             'cashback_balance': float(self.cashback_balance) if self.cashback_balance else 0,
             'total_payout': float(self.total_payout) if self.total_payout else 0,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
         }
     
     def __repr__(self):

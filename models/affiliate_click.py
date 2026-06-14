@@ -46,8 +46,8 @@ class AffiliateClick(db.Model):
             'user_id': str(self.user_id) if self.user_id else None,
             'url': self.url,
             'has_converted': self.has_converted,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'converted_at': self.converted_at.isoformat() if self.converted_at else None
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
+            'converted_at': self.converted_at.isoformat() + 'Z' if self.converted_at else None
         }
     
     def __repr__(self):

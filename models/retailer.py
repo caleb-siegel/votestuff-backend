@@ -48,8 +48,8 @@ class Retailer(db.Model):
             'logo_url': self.logo_url,
             'website_url': self.website_url,
             'is_active': self.is_active,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() + 'Z' if self.updated_at else None
         }
     
     def __repr__(self):

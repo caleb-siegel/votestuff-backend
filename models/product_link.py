@@ -48,8 +48,8 @@ class ProductLink(db.Model):
             'is_affiliate_link': self.is_affiliate_link,
             'is_primary': self.is_primary,
             'click_count': self.click_count,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() + 'Z' if self.updated_at else None,
             'retailer': self.retailer.to_dict() if self.retailer else None
         }
     

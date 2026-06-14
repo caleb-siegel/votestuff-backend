@@ -58,8 +58,8 @@ class List(db.Model):
             'status': self.status,
             'view_count': self.view_count,
             'total_votes': self.total_votes,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'approved_at': self.approved_at.isoformat() if self.approved_at else None,
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
+            'approved_at': self.approved_at.isoformat() + 'Z' if self.approved_at else None,
             'product_count': len(self.products) if self.products else 0,
             'admin_notes': self.admin_notes
         }

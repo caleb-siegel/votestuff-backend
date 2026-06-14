@@ -42,7 +42,7 @@ class Vote(db.Model):
             'list_id': str(self.list_id),
             'user_id': str(self.user_id) if self.user_id else None,
             'vote_type': self.vote_type,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
         }
     
     def __repr__(self):

@@ -31,7 +31,7 @@ class Wishlist(db.Model):
             'id': str(self.id),
             'user_id': str(self.user_id),
             'product_id': str(self.product_id),
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
         }
     
     def __repr__(self):

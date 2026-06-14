@@ -126,7 +126,7 @@ class Product(db.Model):
             'upvote_percentage': round(self.upvote_percentage, 2),
             'rank': self.rank,
             'click_count': self.click_count,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
             'product_links': product_links_data
         }
     

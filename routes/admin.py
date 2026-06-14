@@ -368,7 +368,7 @@ def get_users(current_user):
                 'display_name': user.display_name,
                 'is_admin': user.is_admin,
                 'is_active': user.is_active,
-                'created_at': user.created_at.isoformat() if user.created_at else None
+                'created_at': user.created_at.isoformat() + 'Z' if user.created_at else None
             })
         
         return jsonify({
@@ -736,8 +736,8 @@ def get_affiliate_clicks(current_user):
                 'id': str(click.id),
                 'url': click.url,
                 'has_converted': click.has_converted,
-                'created_at': click.created_at.isoformat() if click.created_at else None,
-                'converted_at': click.converted_at.isoformat() if click.converted_at else None,
+                'created_at': click.created_at.isoformat() + 'Z' if click.created_at else None,
+                'converted_at': click.converted_at.isoformat() + 'Z' if click.converted_at else None,
                 'session_id': click.session_id,
                 'ip_address': click.ip_address,
                 'user_agent': click.user_agent,
@@ -773,7 +773,7 @@ def get_affiliate_clicks(current_user):
                     'revenue': float(conversion.revenue) if conversion.revenue else None,
                     'commission': float(conversion.commission) if conversion.commission else None,
                     'status': conversion.status,
-                    'converted_at': conversion.converted_at.isoformat() if conversion.converted_at else None
+                    'converted_at': conversion.converted_at.isoformat() + 'Z' if conversion.converted_at else None
                 } if conversion else None
             }
             clicks_data.append(click_dict)
@@ -916,7 +916,7 @@ def get_admin_conversions(current_user):
                 conv_dict['click'] = {
                     'id': str(click.id),
                     'url': click.url,
-                    'created_at': click.created_at.isoformat()
+                    'created_at': click.created_at.isoformat() + 'Z' if click.created_at else None
                 }
                 if user:
                     conv_dict['user'] = {
