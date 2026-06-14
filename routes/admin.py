@@ -448,6 +448,24 @@ def get_dashboard_analytics(current_user):
             'slug': lst.slug,
             'clicks': lst.click_count
         } for lst in top_lists]
+
+        # Top performing lists (by votes)
+        top_lists_votes = List.query.order_by(desc(List.total_votes)).limit(10).all()
+        top_lists_votes_data = [{
+            'id': str(lst.id),
+            'title': lst.title,
+            'slug': lst.slug,
+            'votes': lst.total_votes
+        } for lst in top_lists_votes]
+
+        # Top performing lists (by views)
+        top_lists_views = List.query.order_by(desc(List.view_count)).limit(10).all()
+        top_lists_views_data = [{
+            'id': str(lst.id),
+            'title': lst.title,
+            'slug': lst.slug,
+            'views': lst.view_count
+        } for lst in top_lists_views]
         
         # Recent conversions
         recent_conversions_query = Conversion.query.order_by(desc(Conversion.converted_at)).limit(10).all()
@@ -504,6 +522,9 @@ def get_dashboard_analytics(current_user):
                 'conversions': recent_conversions
             },
             'top_lists': top_lists_data,
+            'top_lists_clicks': top_lists_data,
+            'top_lists_votes': top_lists_votes_data,
+            'top_lists_views': top_lists_views_data,
             'recent_conversions': recent_conversions_data,
             'daily_stats': daily_stats
         })
